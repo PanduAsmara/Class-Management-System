@@ -25,7 +25,8 @@ import {
   Check,
   RefreshCw,
   Server,
-  Cloud
+  Cloud,
+  UploadCloud
 } from "lucide-react";
 import {
   getCurrentUser,
@@ -41,6 +42,7 @@ import {
   getActiveClassId,
   getAllCoursesGlobal,
   getSettings,
+  uploadLocalDataToCloud,
   subscribeToStore
 } from "@/lib/storage";
 import { checkSupabaseConnection } from "@/lib/supabase-service";
@@ -72,7 +74,9 @@ export default function DeveloperConsolePage() {
     message: "Memeriksa koneksi...",
     loading: true,
   });
-  const [copiedSql, setCopiedSql] = useState(false);
+
+  const [syncingCloud, setSyncingCloud] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
 
   // Filter States
   const [userSearchQuery, setUserSearchQuery] = useState("");
@@ -108,6 +112,19 @@ export default function DeveloperConsolePage() {
     });
   };
 
+  const handleSyncToCloud = async () => {
+    setSyncingCloud(true);
+    setSyncResult(null);
+    const res = await uploadLocalDataToCloud();
+    if (res.success) {
+      setSyncResult(`Berhasil! ${res.syncedClasses} Kelas dan ${res.syncedUsers} Akun berhasil disinkronkan ke Supabase Cloud.`);
+      checkConnection();
+    } else {
+      setSyncResult(`Gagal sinkronisasi: ${res.error}`);
+    }
+    setSyncingCloud(false);
+  };
+
   useEffect(() => {
     const user = getCurrentUser();
     setCurrentUser(user);
@@ -130,6 +147,9 @@ export default function DeveloperConsolePage() {
     setClasses(getClasses());
     setUsers(getAllUsers());
     checkConnection();
+
+    // Auto sync local data to cloud in background if connected
+    uploadLocalDataToCloud().catch(console.error);
 
     const unsubscribe = subscribeToStore(() => {
       setClasses(getClasses());
@@ -270,13 +290,6 @@ export default function DeveloperConsolePage() {
     if (confirm(`Hapus akun pengguna "${name}"?`)) {
       deleteUser(id);
     }
-  };
-
-  const handleCopySchema = () => {
-    const schemaSql = `-- Jalankan file supabase/schema.sql di SQL Editor Supabase Anda`;
-    navigator.clipboard.writeText(schemaSql);
-    setCopiedSql(true);
-    setTimeout(() => setCopiedSql(false), 2500);
   };
 
   // Filtered Users
@@ -616,6 +629,43 @@ export default function DeveloperConsolePage() {
       {/* 3. SISTEM & SUPABASE READINESS */}
       {activeTab === "system" && (
         <div className="space-y-6">
+          {/* Sync Button Card */}
+          <div className="bg-white border border-blue-200 rounded-3xl p-6 shadow-card space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="font-heading font-bold text-lg text-slate-900 flex items-center gap-2">
+                  <UploadCloud className="w-5 h-5 text-blue-600" /> Sinkronkan Data ke Supabase Cloud
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Unggah seluruh kelas dan akun yang telah dibuat di browser ini agar dapat diakses dari browser lain / perangkat mahasiswa.
+                </p>
+              </div>
+
+              <BrutalButton
+                onClick={handleSyncToCloud}
+                variant="primary"
+                size="md"
+                disabled={syncingCloud}
+                icon={<UploadCloud className={`w-4 h-4 ${syncingCloud ? "animate-bounce" : ""}`} />}
+              >
+                {syncingCloud ? "Menyinkronkan..." : "Unggah Data ke Supabase Cloud"}
+              </BrutalButton>
+            </div>
+
+            {syncResult && (
+              <div
+                className={`p-3.5 rounded-2xl text-xs font-semibold flex items-center gap-2 animate-in fade-in ${
+                  syncResult.includes("Berhasil")
+                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                    : "bg-rose-50 text-rose-800 border border-rose-200"
+                }`}
+              >
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{syncResult}</span>
+              </div>
+            )}
+          </div>
+
           {/* Supabase Live Status Card */}
           <BrutalCard
             header={
@@ -649,7 +699,7 @@ export default function DeveloperConsolePage() {
                   />
                   <div>
                     <div className="font-heading font-bold text-sm">
-                      {supabaseStatus.connected ? "Supabase Cloud: Terhubung & Aktif" : "Supabase Cloud: Menunggu Kredensial .env.local"}
+                      {supabaseStatus.connected ? "Supabase Cloud: Terhubung & Aktif" : "Supabase Cloud: Menunggu Kredensial Environment"}
                     </div>
                     <div className="text-xs opacity-90 mt-0.5">{supabaseStatus.message}</div>
                   </div>
@@ -660,36 +710,6 @@ export default function DeveloperConsolePage() {
                     {supabaseStatus.connected ? "Real-Time Cloud Mode" : "Local Storage Fallback"}
                   </span>
                 </div>
-              </div>
-
-              {/* Step-by-Step Instructions */}
-              <div className="space-y-3 pt-2">
-                <h4 className="font-heading font-bold text-sm text-slate-900">
-                  Langkah Menghubungkan Supabase Cloud:
-                </h4>
-
-                <ol className="space-y-2.5 text-xs text-slate-700">
-                  <li className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
-                    <div className="font-semibold text-slate-900 flex items-center gap-1.5">
-                      <span className="w-5 h-5 bg-blue-600 text-white rounded-md flex items-center justify-center text-[11px]">1</span>
-                      Jalankan Skema SQL di Supabase SQL Editor
-                    </div>
-                    <p className="text-slate-500 pl-6.5">
-                      File <code className="bg-white px-1.5 py-0.2 rounded font-mono text-blue-700 border">supabase/schema.sql</code> telah otomatis dibuat dengan 10 tabel, RLS, dan Storage Buckets. Copy dan paste file tersebut ke SQL Editor Supabase Dashboard Anda.
-                    </p>
-                  </li>
-
-                  <li className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
-                    <div className="font-semibold text-slate-900 flex items-center gap-1.5">
-                      <span className="w-5 h-5 bg-blue-600 text-white rounded-md flex items-center justify-center text-[11px]">2</span>
-                      Tambahkan URL & Anon Key ke <code className="font-mono">.env.local</code>
-                    </div>
-                    <div className="pl-6.5 pt-1 font-mono text-[11px] bg-slate-900 text-emerald-300 p-2.5 rounded-xl overflow-x-auto">
-                      NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co<br />
-                      NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
-                    </div>
-                  </li>
-                </ol>
               </div>
             </div>
           </BrutalCard>

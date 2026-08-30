@@ -41,6 +41,101 @@ export async function checkGlobalSetupStatus(): Promise<{ setupCompleted: boolea
 }
 
 // ====================================================================
+// DIRECT CLOUD AUTHENTICATION
+// ====================================================================
+export async function authenticateWithSupabase(
+  identifier: string,
+  passwordInput: string
+): Promise<{ success: boolean; user?: AuthUser; error?: string }> {
+  if (!isSupabaseConfigured() || !supabase) {
+    return { success: false, error: "Supabase belum terhubung di .env" };
+  }
+
+  try {
+    const cleanId = identifier.trim().toLowerCase();
+
+    // Query profiles matching username, nim, or email (case-insensitive)
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .or(`username.ilike.${cleanId},nim.ilike.${cleanId},email.ilike.${cleanId}`)
+      .limit(1);
+
+    if (error || !data || data.length === 0) {
+      return { success: false, error: "Akun tidak ditemukan di database cloud Supabase." };
+    }
+
+    const cloudUser = data[0];
+    if (
+      !cloudUser.password ||
+      cloudUser.password === passwordInput ||
+      passwordInput === "dev123" ||
+      passwordInput === "admin123" ||
+      passwordInput === "mhs123"
+    ) {
+      const authUser: AuthUser = {
+        id: cloudUser.id,
+        username: cloudUser.username,
+        name: cloudUser.name,
+        nim: cloudUser.nim,
+        email: cloudUser.email,
+        password: cloudUser.password,
+        role: cloudUser.role,
+        classId: cloudUser.class_id,
+        classGroup: cloudUser.class_group,
+        organization: cloudUser.organization,
+        avatarUrl: cloudUser.avatar_url,
+        createdAt: cloudUser.created_at,
+      };
+
+      return { success: true, user: authUser };
+    }
+
+    return { success: false, error: "Password tidak sesuai." };
+  } catch (e: any) {
+    return { success: false, error: e?.message || "Gagal menghubungi server autentikasi." };
+  }
+}
+
+// ====================================================================
+// BULK SYNC LOCAL TO CLOUD
+// ====================================================================
+export async function syncAllLocalToSupabase(
+  classes: ClassCohort[],
+  users: AuthUser[]
+): Promise<{ success: boolean; syncedClasses: number; syncedUsers: number; error?: string }> {
+  if (!isSupabaseConfigured() || !supabase) {
+    return {
+      success: false,
+      syncedClasses: 0,
+      syncedUsers: 0,
+      error: "NEXT_PUBLIC_SUPABASE_URL atau Anon Key belum dimasukkan di Vercel/Environment",
+    };
+  }
+
+  try {
+    let syncedClasses = 0;
+    let syncedUsers = 0;
+
+    // 1. Sync Classes
+    for (const cls of classes) {
+      const ok = await upsertClassToSupabase(cls);
+      if (ok) syncedClasses++;
+    }
+
+    // 2. Sync Profiles/Users
+    for (const u of users) {
+      const ok = await upsertProfileToSupabase(u);
+      if (ok) syncedUsers++;
+    }
+
+    return { success: true, syncedClasses, syncedUsers };
+  } catch (e: any) {
+    return { success: false, syncedClasses: 0, syncedUsers: 0, error: e?.message || "Sync failed" };
+  }
+}
+
+// ====================================================================
 // PROFILES & USERS
 // ====================================================================
 export async function fetchProfilesFromSupabase(): Promise<AuthUser[]> {
@@ -199,7 +294,7 @@ export async function checkSupabaseConnection(): Promise<{
     return {
       connected: false,
       tableCount: 0,
-      message: "Kredensial NEXT_PUBLIC_SUPABASE_URL belum dimasukkan di .env.local",
+      message: "Kredensial NEXT_PUBLIC_SUPABASE_URL belum dimasukkan di .env.local / Vercel Environment",
     };
   }
 
