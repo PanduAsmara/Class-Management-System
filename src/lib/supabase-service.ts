@@ -9,8 +9,146 @@ import {
   Assignment,
   CalendarEvent,
   Note,
-  NotificationItem
+  NotificationItem,
+  SystemSettings
 } from "@/types";
+
+// ====================================================================
+// CHECK GLOBAL SETUP STATUS FROM SUPABASE
+// ====================================================================
+export async function checkGlobalSetupStatus(): Promise<{ setupCompleted: boolean; developerExists: boolean }> {
+  if (!isSupabaseConfigured() || !supabase) {
+    return { setupCompleted: false, developerExists: false };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, role")
+      .eq("role", "developer")
+      .limit(1);
+
+    if (error) {
+      console.warn("Supabase profiles check error:", error.message);
+      return { setupCompleted: false, developerExists: false };
+    }
+
+    const hasDev = Boolean(data && data.length > 0);
+    return { setupCompleted: hasDev, developerExists: hasDev };
+  } catch (e) {
+    return { setupCompleted: false, developerExists: false };
+  }
+}
+
+// ====================================================================
+// PROFILES & USERS
+// ====================================================================
+export async function fetchProfilesFromSupabase(): Promise<AuthUser[]> {
+  if (!isSupabaseConfigured() || !supabase) return [];
+  try {
+    const { data, error } = await supabase.from("profiles").select("*");
+    if (error || !data) return [];
+    return data.map((d: any) => ({
+      id: d.id,
+      username: d.username,
+      name: d.name,
+      nim: d.nim,
+      email: d.email,
+      password: d.password,
+      role: d.role,
+      classId: d.class_id,
+      classGroup: d.class_group,
+      organization: d.organization,
+      avatarUrl: d.avatar_url,
+      createdAt: d.created_at,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function upsertProfileToSupabase(user: AuthUser): Promise<boolean> {
+  if (!isSupabaseConfigured() || !supabase) return false;
+  try {
+    const { error } = await supabase.from("profiles").upsert({
+      id: user.id,
+      username: user.username,
+      name: user.name,
+      nim: user.nim,
+      email: user.email,
+      password: user.password,
+      role: user.role,
+      class_id: user.classId || null,
+      class_group: user.classGroup,
+      organization: user.organization,
+      avatar_url: user.avatarUrl,
+    });
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteProfileFromSupabase(id: string): Promise<boolean> {
+  if (!isSupabaseConfigured() || !supabase) return false;
+  try {
+    const { error } = await supabase.from("profiles").delete().eq("id", id);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+// ====================================================================
+// CLASSES
+// ====================================================================
+export async function fetchClassesFromSupabase(): Promise<ClassCohort[]> {
+  if (!isSupabaseConfigured() || !supabase) return [];
+  try {
+    const { data, error } = await supabase.from("classes").select("*").order("semester", { ascending: true });
+    if (error || !data) return [];
+    return data.map((d: any) => ({
+      id: d.id,
+      name: d.name,
+      semester: d.semester,
+      academicYear: d.academic_year,
+      major: d.major,
+      description: d.description,
+      leaderId: d.leader_id,
+      createdAt: d.created_at,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function upsertClassToSupabase(cls: ClassCohort): Promise<boolean> {
+  if (!isSupabaseConfigured() || !supabase) return false;
+  try {
+    const { error } = await supabase.from("classes").upsert({
+      id: cls.id,
+      name: cls.name,
+      semester: cls.semester,
+      academic_year: cls.academicYear,
+      major: cls.major,
+      description: cls.description,
+      leader_id: cls.leaderId || null,
+    });
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteClassFromSupabase(id: string): Promise<boolean> {
+  if (!isSupabaseConfigured() || !supabase) return false;
+  try {
+    const { error } = await supabase.from("classes").delete().eq("id", id);
+    return !error;
+  } catch {
+    return false;
+  }
+}
 
 // ====================================================================
 // STORAGE BUCKET UPLOADS
@@ -50,88 +188,8 @@ export async function uploadFileToSupabase(
 }
 
 // ====================================================================
-// REAL-TIME CLOUD CRUD HELPERS
+// HEALTH CHECK
 // ====================================================================
-
-// CLASSES
-export async function fetchClassesFromSupabase(): Promise<ClassCohort[]> {
-  if (!isSupabaseConfigured() || !supabase) return [];
-  const { data, error } = await supabase.from("classes").select("*").order("semester", { ascending: true });
-  if (error || !data) return [];
-  return data.map((d: any) => ({
-    id: d.id,
-    name: d.name,
-    semester: d.semester,
-    academicYear: d.academic_year,
-    major: d.major,
-    description: d.description,
-    leaderId: d.leader_id,
-    createdAt: d.created_at,
-  }));
-}
-
-export async function insertClassToSupabase(cls: ClassCohort): Promise<boolean> {
-  if (!isSupabaseConfigured() || !supabase) return false;
-  const { error } = await supabase.from("classes").insert({
-    id: cls.id,
-    name: cls.name,
-    semester: cls.semester,
-    academic_year: cls.academicYear,
-    major: cls.major,
-    description: cls.description,
-    leader_id: cls.leaderId,
-  });
-  return !error;
-}
-
-// COURSES
-export async function fetchCoursesFromSupabase(classId?: string): Promise<Course[]> {
-  if (!isSupabaseConfigured() || !supabase) return [];
-  let query = supabase.from("courses").select("*");
-  if (classId) {
-    query = query.eq("class_id", classId);
-  }
-  const { data, error } = await query;
-  if (error || !data) return [];
-  return data.map((d: any) => ({
-    id: d.id,
-    classId: d.class_id,
-    name: d.name,
-    code: d.code,
-    semester: d.semester,
-    sks: d.sks,
-    lecturer: d.lecturer,
-    lecturerNip: d.lecturer_nip,
-    lecturerContact: d.lecturer_contact,
-    color: d.color,
-    room: d.room,
-    description: d.description,
-    syllabus: d.syllabus,
-    createdAt: d.created_at,
-  }));
-}
-
-export async function insertCourseToSupabase(course: Course): Promise<boolean> {
-  if (!isSupabaseConfigured() || !supabase) return false;
-  const { error } = await supabase.from("courses").insert({
-    id: course.id,
-    class_id: course.classId,
-    name: course.name,
-    code: course.code,
-    semester: course.semester,
-    sks: course.sks,
-    lecturer: course.lecturer,
-    lecturer_nip: course.lecturerNip,
-    lecturer_contact: course.lecturerContact,
-    color: course.color,
-    room: course.room,
-    description: course.description,
-    syllabus: course.syllabus || [],
-  });
-  return !error;
-}
-
-// Check live connection health
 export async function checkSupabaseConnection(): Promise<{
   connected: boolean;
   tableCount: number;

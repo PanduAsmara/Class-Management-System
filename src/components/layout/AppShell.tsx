@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Navbar } from "./Navbar";
 import { Sidebar } from "./Sidebar";
 import { GlobalSearchModal } from "./GlobalSearchModal";
-import { getCurrentUser, isSetupCompleted } from "@/lib/storage";
+import { getCurrentUser, isSetupCompleted, syncWithSupabaseCloud } from "@/lib/storage";
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const pathname = usePathname();
@@ -17,17 +17,27 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   useEffect(() => {
     setMounted(true);
 
-    // 1. If First-Time Setup is not done yet, force redirect to /setup
-    if (!isSetupCompleted() && pathname !== "/setup") {
-      router.push("/setup");
-      return;
-    }
+    const initAuthGuard = async () => {
+      // Sync cloud state first
+      await syncWithSupabaseCloud();
 
-    // 2. If setup is completed but user is not logged in, force redirect to /login
-    if (isSetupCompleted() && !getCurrentUser() && pathname !== "/login" && pathname !== "/setup") {
-      router.push("/login");
-      return;
-    }
+      const user = getCurrentUser();
+      const setupDone = isSetupCompleted();
+
+      // 1. If trying to visit /setup but setup is already done globally -> redirect to /login
+      if (pathname === "/setup" && setupDone) {
+        router.push("/login");
+        return;
+      }
+
+      // 2. If user is not logged in and not on public pages -> redirect to /login
+      if (!user && pathname !== "/login" && pathname !== "/setup") {
+        router.push("/login");
+        return;
+      }
+    };
+
+    initAuthGuard();
   }, [pathname, router]);
 
   if (!mounted) {

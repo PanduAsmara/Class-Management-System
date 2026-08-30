@@ -11,7 +11,7 @@ import {
   ArrowRight,
   Shield
 } from "lucide-react";
-import { login, isSetupCompleted } from "@/lib/storage";
+import { asyncLogin, isSetupCompleted, syncWithSupabaseCloud } from "@/lib/storage";
 import { BrutalButton } from "@/components/ui/BrutalButton";
 
 export default function LoginPage() {
@@ -20,23 +20,19 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [setupDone, setSetupDone] = useState(true);
 
   useEffect(() => {
-    const isDone = isSetupCompleted();
-    setSetupDone(isDone);
-    if (!isDone) {
-      router.push("/setup");
-    }
-  }, [router]);
+    // Sync with Supabase Cloud on mount
+    syncWithSupabaseCloud();
+  }, []);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
-    setTimeout(() => {
-      const res = login(identifier, password);
+    try {
+      const res = await asyncLogin(identifier, password);
       if (res.success && res.user) {
         if (res.user.role === "developer") {
           router.push("/developer");
@@ -47,24 +43,11 @@ export default function LoginPage() {
         setError(res.error || "Username / NIM atau password salah. Silakan periksa kembali.");
         setLoading(false);
       }
-    }, 300);
+    } catch {
+      setError("Terjadi kesalahan saat memverifikasi login.");
+      setLoading(false);
+    }
   };
-
-  if (!setupDone) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="text-center space-y-3">
-          <Sparkles className="w-8 h-8 text-blue-600 mx-auto animate-spin" />
-          <h2 className="font-heading font-bold text-lg text-slate-800">
-            Mengarahkan ke Setup Wizard...
-          </h2>
-          <Link href="/setup">
-            <BrutalButton variant="primary" size="sm">Buka Setup Wizard</BrutalButton>
-          </Link>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6 font-sans">
@@ -156,7 +139,7 @@ export default function LoginPage() {
 
         {/* Footer info */}
         <div className="text-center text-xs text-slate-400">
-          Teknik Multimedia & Jaringan • Sistem Autentikasi Aman
+          Teknik Multimedia & Jaringan • Sistem Autentikasi Cloud
         </div>
       </div>
     </div>

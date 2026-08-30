@@ -14,7 +14,8 @@ import {
   Trash2,
   GraduationCap
 } from "lucide-react";
-import { isSetupCompleted, completeSetup } from "@/lib/storage";
+import { isSetupCompleted, completeSetup, syncWithSupabaseCloud } from "@/lib/storage";
+import { checkGlobalSetupStatus } from "@/lib/supabase-service";
 import { BrutalButton } from "@/components/ui/BrutalButton";
 import { BrutalInput } from "@/components/ui/BrutalInput";
 
@@ -27,6 +28,7 @@ interface InitialClassItem {
 export default function SetupWizardPage() {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [checking, setChecking] = useState(true);
 
   // Step 1: Developer Account
   const [devUsername, setDevUsername] = useState("developer");
@@ -46,10 +48,17 @@ export default function SetupWizardPage() {
   const [newClassSemester, setNewClassSemester] = useState(1);
 
   useEffect(() => {
-    // If setup is already done, redirect to login
-    if (isSetupCompleted()) {
-      router.push("/login");
-    }
+    const checkSetupLock = async () => {
+      await syncWithSupabaseCloud();
+      const { setupCompleted, developerExists } = await checkGlobalSetupStatus();
+      if (setupCompleted || developerExists || isSetupCompleted()) {
+        router.push("/login");
+        return;
+      }
+      setChecking(false);
+    };
+
+    checkSetupLock();
   }, [router]);
 
   const handleAddClass = () => {
@@ -82,6 +91,17 @@ export default function SetupWizardPage() {
 
     router.push("/developer");
   };
+
+  if (checking) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="text-center space-y-3">
+          <Sparkles className="w-8 h-8 text-blue-600 mx-auto animate-spin" />
+          <p className="text-xs text-slate-500 font-medium">Memeriksa status inisialisasi sistem...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6 font-sans">

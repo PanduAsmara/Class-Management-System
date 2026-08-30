@@ -15,6 +15,15 @@ import {
   UserProfile,
   SystemSettings
 } from "@/types";
+import {
+  fetchProfilesFromSupabase,
+  upsertProfileToSupabase,
+  deleteProfileFromSupabase,
+  fetchClassesFromSupabase,
+  upsertClassToSupabase,
+  deleteClassFromSupabase,
+  checkGlobalSetupStatus
+} from "./supabase-service";
 
 const STORAGE_KEYS = {
   SETUP_DONE: "tmj_cms_setup_completed",
@@ -81,7 +90,40 @@ function setItem<T>(key: string, value: T): void {
     localStorage.setItem(key, JSON.stringify(value));
     notifySubscribers();
   } catch (error) {
-    console.error(`Error writing ${key} to localStorage:`, error);
+    console.error(`Error writing ${key} from localStorage:`, error);
+  }
+}
+
+// ----------------------------------------------------
+// Global Cloud Sync Initializer
+// ----------------------------------------------------
+export async function syncWithSupabaseCloud(): Promise<void> {
+  if (typeof window === "undefined") return;
+
+  try {
+    const { setupCompleted, developerExists } = await checkGlobalSetupStatus();
+    if (setupCompleted || developerExists) {
+      setItem(STORAGE_KEYS.SETUP_DONE, true);
+    }
+
+    const cloudClasses = await fetchClassesFromSupabase();
+    if (cloudClasses.length > 0) {
+      setItem(STORAGE_KEYS.CLASSES, cloudClasses);
+      if (!getActiveClassId()) {
+        setActiveClassId(cloudClasses[0].id);
+      }
+    }
+
+    const cloudProfiles = await fetchProfilesFromSupabase();
+    if (cloudProfiles.length > 0) {
+      const hasDev = cloudProfiles.some((p) => p.role === "developer");
+      if (hasDev) {
+        setItem(STORAGE_KEYS.SETUP_DONE, true);
+      }
+      setItem(STORAGE_KEYS.USERS, cloudProfiles);
+    }
+  } catch (e) {
+    console.warn("Cloud sync warning:", e);
   }
 }
 
@@ -89,7 +131,10 @@ function setItem<T>(key: string, value: T): void {
 // First-Time Setup Wizard State
 // ----------------------------------------------------
 export function isSetupCompleted(): boolean {
-  return getItem<boolean>(STORAGE_KEYS.SETUP_DONE, false);
+  const localDone = getItem<boolean>(STORAGE_KEYS.SETUP_DONE, false);
+  const users = getItem<AuthUser[]>(STORAGE_KEYS.USERS, []);
+  const hasDev = users.some((u) => u.role === "developer");
+  return localDone || hasDev;
 }
 
 export function completeSetup(data: {
@@ -122,7 +167,7 @@ export function completeSetup(data: {
     createdAt: now,
   }));
 
-  // 3. Save Users, Classes, Settings
+  // 3. Save Users, Classes, Settings locally
   setItem(STORAGE_KEYS.USERS, [devUser]);
   setItem(STORAGE_KEYS.CLASSES, initialClasses);
   setItem(STORAGE_KEYS.SETTINGS, {
@@ -130,18 +175,15 @@ export function completeSetup(data: {
     organizationName: data.organizationName,
   });
 
-  // Set active class to the first class if created
   if (initialClasses.length > 0) {
     setItem(STORAGE_KEYS.ACTIVE_CLASS, initialClasses[0].id);
   }
 
   // 4. Log in as the Developer
   setItem(STORAGE_KEYS.AUTH_USER, devUser);
-
-  // 5. Mark Setup as Completed
   setItem(STORAGE_KEYS.SETUP_DONE, true);
 
-  // 6. Ensure clean slate (0 dummy data)
+  // 5. Clean slate arrays
   setItem(STORAGE_KEYS.COURSES, []);
   setItem(STORAGE_KEYS.SCHEDULES, []);
   setItem(STORAGE_KEYS.ANNOUNCEMENTS, []);
@@ -150,6 +192,10 @@ export function completeSetup(data: {
   setItem(STORAGE_KEYS.CALENDAR, []);
   setItem(STORAGE_KEYS.NOTES, []);
   setItem(STORAGE_KEYS.NOTIFICATIONS, []);
+
+  // 6. Direct Supabase Cloud Sync (Background)
+  upsertProfileToSupabase(devUser).catch(console.error);
+  initialClasses.forEach((cls) => upsertClassToSupabase(cls).catch(console.error));
 }
 
 // ----------------------------------------------------
@@ -161,6 +207,12 @@ export function getCurrentUser(): AuthUser | null {
 
 export function isAuthenticated(): boolean {
   return getCurrentUser() !== null;
+}
+
+export async function asyncLogin(identifier: string, password: string): Promise<{ success: boolean; user?: AuthUser; error?: string }> {
+  // 1. Sync with Supabase Cloud first
+  await syncWithSupabaseCloud();
+  return login(identifier, password);
 }
 
 export function login(identifier: string, password: string): { success: boolean; user?: AuthUser; error?: string } {
@@ -179,7 +231,6 @@ export function login(identifier: string, password: string): { success: boolean;
     if (!foundUser.password || foundUser.password === password || password === "admin123" || password === "mhs123" || password === "dev123") {
       setItem(STORAGE_KEYS.AUTH_USER, foundUser);
 
-      // If user has an assigned class, set active class context
       if (foundUser.classId) {
         setActiveClassId(foundUser.classId);
       }
@@ -229,6 +280,10 @@ export function createUser(user: Omit<AuthUser, "id" | "createdAt">): AuthUser {
   };
 
   saveAllUsers([newUser, ...users]);
+
+  // Sync to Supabase Cloud
+  upsertProfileToSupabase(newUser).catch(console.error);
+
   return newUser;
 }
 
@@ -237,7 +292,11 @@ export function updateUser(id: string, updated: Partial<AuthUser>): void {
   const updatedUsers = users.map((u) => (u.id === id ? { ...u, ...updated } : u));
   saveAllUsers(updatedUsers);
 
-  // If updating currently logged in user, refresh session
+  const updatedTarget = updatedUsers.find((u) => u.id === id);
+  if (updatedTarget) {
+    upsertProfileToSupabase(updatedTarget).catch(console.error);
+  }
+
   const current = getCurrentUser();
   if (current && current.id === id) {
     setItem(STORAGE_KEYS.AUTH_USER, { ...current, ...updated });
@@ -247,6 +306,7 @@ export function updateUser(id: string, updated: Partial<AuthUser>): void {
 export function deleteUser(id: string): void {
   const users = getAllUsers();
   saveAllUsers(users.filter((u) => u.id !== id));
+  deleteProfileFromSupabase(id).catch(console.error);
 }
 
 // ----------------------------------------------------
@@ -270,22 +330,31 @@ export function addClass(cohort: Omit<ClassCohort, "id" | "createdAt">): ClassCo
 
   saveClasses([...classes, newClass]);
 
-  // If no active class, set this one
   if (!getActiveClassId()) {
     setActiveClassId(newClass.id);
   }
+
+  // Sync to Supabase Cloud
+  upsertClassToSupabase(newClass).catch(console.error);
 
   return newClass;
 }
 
 export function updateClass(id: string, updated: Partial<ClassCohort>): void {
   const classes = getClasses();
-  saveClasses(classes.map((c) => (c.id === id ? { ...c, ...updated } : c)));
+  const updatedClasses = classes.map((c) => (c.id === id ? { ...c, ...updated } : c));
+  saveClasses(updatedClasses);
+
+  const target = updatedClasses.find((c) => c.id === id);
+  if (target) {
+    upsertClassToSupabase(target).catch(console.error);
+  }
 }
 
 export function deleteClass(id: string): void {
   const classes = getClasses();
   saveClasses(classes.filter((c) => c.id !== id));
+  deleteClassFromSupabase(id).catch(console.error);
 
   if (getActiveClassId() === id) {
     const remaining = classes.filter((c) => c.id !== id);
@@ -367,7 +436,7 @@ export function saveProfile(profile: UserProfile): void {
 // Academic Entities (Courses, Schedules, Assignments, etc.)
 // ----------------------------------------------------
 
-// Courses (Clean slate by default)
+// Courses
 export function getCourses(): Course[] {
   const activeClassId = getActiveClassId();
   const allCourses = getItem<Course[]>(STORAGE_KEYS.COURSES, []);
