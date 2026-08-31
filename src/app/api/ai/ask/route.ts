@@ -23,10 +23,9 @@ const MODELS_TO_TRY = [
   { version: "v1beta", model: "gemini-3-flash-preview" },
 ];
 
-function timingSafeCheck(inputSecret: string, expectedSecret: string): boolean {
-  if (!inputSecret || !expectedSecret) return false;
-  if (inputSecret.length !== expectedSecret.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(inputSecret), Buffer.from(expectedSecret));
+function timingSafeCheck(a: string, b: string): boolean {
+  if (!a || !b || a.length !== b.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
 export async function POST(req: NextRequest) {
@@ -35,29 +34,60 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Konfigurasi Keamanan: API_SECRET_KEY belum diisi di Vercel Environment Variables.",
+          error: "Keamanan: API_SECRET_KEY belum diisi di Vercel Environment Variables.",
         },
         { status: 500 }
       );
     }
 
-    const authHeader = req.headers.get("authorization") || req.headers.get("x-api-secret") || "";
-    const token = authHeader.replace("Bearer ", "").trim();
-
-    if (!timingSafeCheck(token, API_SECRET)) {
-      return NextResponse.json(
-        { success: false, error: "Akses Ditolak: Kunci Otentikasi (API Secret) tidak valid." },
-        { status: 401 }
-      );
-    }
+    const timestamp = req.headers.get("x-timestamp") || "";
+    const signature = req.headers.get("x-signature") || "";
+    const bearerToken = (req.headers.get("authorization") || "").replace("Bearer ", "").trim();
 
     const body = await req.json();
-    const { prompt, senderName } = body;
+    const { prompt, senderName, senderJid } = body;
 
     if (!prompt || !prompt.trim()) {
       return NextResponse.json(
         { success: false, error: "Prompt tidak boleh kosong." },
         { status: 400 }
+      );
+    }
+
+    // 1. VERIFIKASI HMAC TIME-BASED SIGNATURE (Anti-Replay Attack & Anti-Sniffing)
+    let isAuthorized = false;
+
+    if (timestamp && signature) {
+      const now = Math.floor(Date.now() / 1000);
+      const reqTime = parseInt(timestamp, 10);
+
+      // Kunci kedaluwarsa setelah 60 detik
+      if (Math.abs(now - reqTime) <= 60) {
+        const expectedSignature = crypto
+          .createHmac("sha256", API_SECRET)
+          .update(`${timestamp}:${prompt}`)
+          .digest("hex");
+
+        if (timingSafeCheck(signature, expectedSignature)) {
+          isAuthorized = true;
+        }
+      }
+    }
+
+    // Fallback: Direct Bearer Token check
+    if (!isAuthorized && bearerToken) {
+      if (timingSafeCheck(bearerToken, API_SECRET)) {
+        isAuthorized = true;
+      }
+    }
+
+    if (!isAuthorized) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Akses Ditolak (403 Forbidden): HMAC Signature kedaluwarsa atau tidak valid.",
+        },
+        { status: 403 }
       );
     }
 
@@ -113,7 +143,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: `Google Gemini API Error: ${lastErrorDetails || "Gagal mendapatkan respon."}`,
+          error: `Google Gemini API Error: ${lastErrorDetails || "Gagal menghasilkan jawaban."}`,
         },
         { status: 500 }
       );
