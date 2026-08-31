@@ -14,7 +14,7 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: "TMJ Class Management System",
   description: "Pusat Kelola Informasi Perkuliahan Mahasiswa Teknik Multimedia & Jaringan",
-  manifest: "/manifest.webmanifest",
+  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -40,6 +40,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="TMJ Class" />
         <meta name="format-detection" content="telephone=no" />
         <meta name="mobile-web-app-capable" content="yes" />
+        <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
       </head>
       <body className="antialiased font-sans bg-slate-50 text-slate-900 selection:bg-blue-600 selection:text-white">
