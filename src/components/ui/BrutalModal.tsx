@@ -46,7 +46,7 @@ export const BrutalModal: React.FC<BrutalModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
       {/* Soft Backdrop */}
       <div
         className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity duration-200"
@@ -56,14 +56,14 @@ export const BrutalModal: React.FC<BrutalModalProps> = ({
       {/* Modal Container */}
       <div
         className={cn(
-          "relative w-full bg-white border border-slate-200/80 rounded-2xl shadow-soft-xl z-10 flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150",
+          "relative w-full bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl shadow-soft-xl z-10 flex flex-col max-h-[88vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150",
           maxWidthStyles[maxWidth]
         )}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 bg-white">
           <div>
-            <h3 className="font-heading font-bold text-base text-slate-900">
+            <h3 className="font-heading font-bold text-sm sm:text-base text-slate-900">
               {title}
             </h3>
             {subtitle && (
@@ -80,7 +80,7 @@ export const BrutalModal: React.FC<BrutalModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto flex-1">{children}</div>
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1">{children}</div>
       </div>
     </div>
   );

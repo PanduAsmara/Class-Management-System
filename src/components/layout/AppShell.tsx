@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Navbar } from "./Navbar";
 import { Sidebar } from "./Sidebar";
+import { BottomNav } from "./BottomNav";
 import { GlobalSearchModal } from "./GlobalSearchModal";
 import { getCurrentUser, isSetupCompleted, syncWithSupabaseCloud } from "@/lib/storage";
 
@@ -51,7 +52,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   return (
     <div className="h-screen w-screen flex overflow-hidden bg-slate-50 text-slate-900 font-sans">
-      {/* Pinned Full-Height Sidebar */}
+      {/* Pinned Full-Height Sidebar (Desktop & Tablet) */}
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* Main Content Pane */}
@@ -63,11 +64,14 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
         />
 
         {/* Independent Smooth Scrollable Content Container */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-slate-50">
+        <main className="flex-1 overflow-y-auto p-3.5 sm:p-6 lg:p-8 pb-24 lg:pb-8 bg-slate-50">
           <div className="max-w-6xl mx-auto w-full">
             {children}
           </div>
         </main>
+
+        {/* Native-Feel Mobile Bottom Navigation Bar */}
+        <BottomNav />
       </div>
 
       {/* Global Spotlight Search Modal */}
