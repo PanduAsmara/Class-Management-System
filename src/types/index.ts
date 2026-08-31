@@ -18,6 +18,7 @@ export interface AuthUser {
   email?: string;
   password?: string;
   nim?: string;
+  phoneNumber?: string; // WhatsApp number
   role: UserRole;
   classId?: string; // Associated ClassCohort ID
   classGroup?: string; // Display class name e.g. "TMJ 4A"
@@ -162,7 +163,23 @@ export interface UserProfile {
   organization: string;
   activeSemester: number;
   email: string;
+  phoneNumber?: string;
   avatarUrl?: string;
+}
+
+export type WhatsAppProvider = 'fonnte' | 'wablas' | 'pterodactyl' | 'custom' | 'direct';
+
+export interface WhatsAppConfig {
+  provider: WhatsAppProvider;
+  apiKey?: string;
+  senderPhone?: string;
+  targetPhone?: string;
+  targetGroupName?: string;
+  targetGroupId?: string;
+  customWebhookUrl?: string;
+  enableAutoDailySchedule: boolean;
+  dailyScheduleTime: string; // e.g. "07:00"
+  enableAutoDeadlineReminder: boolean;
 }
 
 export interface SystemSettings {
@@ -173,4 +190,5 @@ export interface SystemSettings {
   enableClassReminders: boolean;
   deadlineAlertHours: number;
   autoSaveNotes: boolean;
+  whatsapp?: WhatsAppConfig;
 }

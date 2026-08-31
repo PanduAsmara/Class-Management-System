@@ -12,6 +12,7 @@ interface ScheduleModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialSchedule?: Schedule | null;
+  defaultDay?: DayOfWeek;
   onSaved?: () => void;
 }
 
@@ -28,6 +29,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({
   isOpen,
   onClose,
   initialSchedule,
+  defaultDay = "Senin",
   onSaved,
 }) => {
   const [courses, setCourses] = useState<Course[]>([]);
@@ -42,7 +44,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({
     type: "Teori" | "Praktikum" | "Respons";
   }>({
     courseId: "",
-    day: "Senin",
+    day: defaultDay,
     startTime: "08:00",
     endTime: "10:30",
     room: "",

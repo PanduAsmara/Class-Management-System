@@ -9,7 +9,8 @@ import {
   Save,
   CheckCircle2,
   Building2,
-  ShieldCheck
+  ShieldCheck,
+  Phone
 } from "lucide-react";
 import {
   getProfile,
@@ -25,6 +26,7 @@ import { UserProfile, SystemSettings, UserRole, ClassCohort, AuthUser } from "@/
 import { BrutalCard } from "@/components/ui/BrutalCard";
 import { BrutalInput } from "@/components/ui/BrutalInput";
 import { BrutalButton } from "@/components/ui/BrutalButton";
+import { WhatsAppConfigCard } from "@/components/whatsapp/WhatsAppConfigCard";
 
 export default function SettingsPage() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(getCurrentUser());
@@ -65,11 +67,11 @@ export default function SettingsPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="font-heading font-extrabold text-2xl sm:text-3xl text-slate-900 tracking-tight">
-              Pengaturan Akun & Profil
+              Pengaturan Akun & WhatsApp Bot
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Informasi Profil Mahasiswa, Kelas Terdaftar, & Preferensi Notifikasi
+            Informasi Profil Mahasiswa, Kelas Terdaftar, Preferensi Notifikasi, & Gateway WhatsApp
           </p>
         </div>
 
@@ -143,9 +145,10 @@ export default function SettingsPage() {
 
             <div>
               <BrutalInput
-                label="Nama Kelas / Rombel"
-                value={profile.classGroup}
-                onChange={(e) => setProfile({ ...profile, classGroup: e.target.value })}
+                label="Nomor WhatsApp"
+                value={profile.phoneNumber || ""}
+                onChange={(e) => setProfile({ ...profile, phoneNumber: e.target.value })}
+                placeholder="081234567890"
               />
             </div>
 
@@ -166,65 +169,17 @@ export default function SettingsPage() {
               />
             </div>
           </div>
-        </BrutalCard>
 
-        {/* 3. Notification Preferences */}
-        <BrutalCard
-          header={
-            <div className="flex items-center gap-2">
-              <Bell className="w-4 h-4 text-blue-600" />
-              <span>Preferensi Notifikasi Perkuliahan</span>
-            </div>
-          }
-        >
-          <div className="space-y-3">
-            <label className="flex items-center gap-3 p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 cursor-pointer transition-colors">
-              <input
-                type="checkbox"
-                checked={settings.enableNotifications}
-                onChange={(e) =>
-                  setSettings({ ...settings, enableNotifications: e.target.checked })
-                }
-                className="minimal-check"
-              />
-              <div>
-                <div className="font-semibold text-xs text-slate-900">
-                  Aktifkan Notifikasi Website
-                </div>
-                <div className="text-[11px] text-slate-500">
-                  Tampilkan lonceng peringatan untuk deadline dan pengumuman baru
-                </div>
-              </div>
-            </label>
-
-            <label className="flex items-center gap-3 p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 cursor-pointer transition-colors">
-              <input
-                type="checkbox"
-                checked={settings.enableClassReminders}
-                onChange={(e) =>
-                  setSettings({ ...settings, enableClassReminders: e.target.checked })
-                }
-                className="minimal-check"
-              />
-              <div>
-                <div className="font-semibold text-xs text-slate-900">
-                  Pengingat Kelas Harian
-                </div>
-                <div className="text-[11px] text-slate-500">
-                  Munculkan jadwal kuliah hari ini secara otomatis
-                </div>
-              </div>
-            </label>
+          <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
+            <BrutalButton type="submit" variant="primary" size="md" icon={<Save className="w-4 h-4" />}>
+              Simpan Profil
+            </BrutalButton>
           </div>
         </BrutalCard>
-
-        {/* Save Button */}
-        <div className="flex justify-end">
-          <BrutalButton type="submit" variant="primary" size="lg" icon={<Save className="w-4 h-4" />}>
-            Simpan Pengaturan
-          </BrutalButton>
-        </div>
       </form>
+
+      {/* 3. WhatsApp Bot Gateway Configuration Card */}
+      <WhatsAppConfigCard />
     </div>
   );
 }

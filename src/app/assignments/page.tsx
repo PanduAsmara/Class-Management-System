@@ -12,7 +12,8 @@ import {
   Trash2,
   Kanban,
   List,
-  CheckCircle2
+  CheckCircle2,
+  MessageSquare
 } from "lucide-react";
 import {
   getAssignments,
@@ -27,6 +28,8 @@ import { Assignment, Course, AssignmentPriority, AssignmentStatus, UserRole, Cla
 import { BrutalBadge } from "@/components/ui/BrutalBadge";
 import { BrutalButton } from "@/components/ui/BrutalButton";
 import { AssignmentModal } from "@/components/assignments/AssignmentModal";
+import { WhatsAppBroadcastModal } from "@/components/whatsapp/WhatsAppBroadcastModal";
+import { formatDeadlineAlertMessage } from "@/lib/whatsapp-service";
 import { getRelativeDays, formatShortDate } from "@/lib/utils";
 
 const STATUS_COLUMNS: { id: AssignmentStatus; label: string; dotColor: string }[] = [
@@ -47,6 +50,10 @@ export default function AssignmentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
+
+  // WhatsApp Alert Modal State
+  const [isWaModalOpen, setIsWaModalOpen] = useState(false);
+  const [waMessage, setWaMessage] = useState("");
 
   useEffect(() => {
     setAssignments(getAssignments());
@@ -113,6 +120,13 @@ export default function AssignmentsPage() {
   const handleAddNew = () => {
     setEditingAssignment(null);
     setIsModalOpen(true);
+  };
+
+  const handleOpenWaAlert = (asg: Assignment) => {
+    const course = getCourse(asg.courseId);
+    const formatted = formatDeadlineAlertMessage(activeClass, asg, course);
+    setWaMessage(formatted);
+    setIsWaModalOpen(true);
   };
 
   const getPriorityBadgeVariant = (priority: AssignmentPriority) => {
@@ -300,9 +314,19 @@ export default function AssignmentsPage() {
                             <span className="text-[11px] font-mono font-medium px-2 py-0.5 rounded bg-blue-50 text-blue-700">
                               {course?.code || "TMJ"}
                             </span>
-                            <BrutalBadge variant={getPriorityBadgeVariant(task.priority)} size="sm">
-                              {task.priority}
-                            </BrutalBadge>
+                            <div className="flex items-center gap-1">
+                              <BrutalBadge variant={getPriorityBadgeVariant(task.priority)} size="sm">
+                                {task.priority}
+                              </BrutalBadge>
+                              {/* WhatsApp Quick Alert Button */}
+                              <button
+                                onClick={() => handleOpenWaAlert(task)}
+                                className="p-1 hover:bg-emerald-50 rounded text-emerald-600 transition-colors"
+                                title="Kirim Pengingat Deadline ke WhatsApp"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
 
                           <h4 className="font-heading font-semibold text-xs sm:text-sm text-slate-900 leading-snug">
@@ -419,6 +443,7 @@ export default function AssignmentsPage() {
                 <th>Batas Waktu</th>
                 <th>Status</th>
                 <th>Pengumpulan</th>
+                <th className="text-center">WhatsApp</th>
                 {canManage && <th className="text-center">Aksi</th>}
               </tr>
             </thead>
@@ -484,6 +509,15 @@ export default function AssignmentsPage() {
                         <span className="text-slate-400 text-xs">-</span>
                       )}
                     </td>
+                    <td className="text-center">
+                      <button
+                        onClick={() => handleOpenWaAlert(task)}
+                        className="p-1.5 hover:bg-emerald-50 rounded-lg text-emerald-600"
+                        title="Kirim Alert WA"
+                      >
+                        <MessageSquare className="w-4 h-4 inline" />
+                      </button>
+                    </td>
                     {canManage && (
                       <td>
                         <div className="flex items-center justify-center gap-1">
@@ -520,6 +554,14 @@ export default function AssignmentsPage() {
           setEditingAssignment(null);
         }}
         initialAssignment={editingAssignment}
+      />
+
+      {/* WhatsApp Broadcast Modal */}
+      <WhatsAppBroadcastModal
+        isOpen={isWaModalOpen}
+        onClose={() => setIsWaModalOpen(false)}
+        title="Pengingat Deadline Tugas (WhatsApp)"
+        defaultMessage={waMessage}
       />
     </div>
   );

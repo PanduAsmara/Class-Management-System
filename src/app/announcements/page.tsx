@@ -11,7 +11,8 @@ import {
   User,
   ExternalLink,
   Edit2,
-  Trash2
+  Trash2,
+  MessageSquare
 } from "lucide-react";
 import {
   getAnnouncements,
@@ -25,6 +26,8 @@ import { Announcement, Course, AnnouncementCategory, UserRole, ClassCohort } fro
 import { BrutalBadge } from "@/components/ui/BrutalBadge";
 import { BrutalButton } from "@/components/ui/BrutalButton";
 import { AnnouncementModal } from "@/components/announcements/AnnouncementModal";
+import { WhatsAppBroadcastModal } from "@/components/whatsapp/WhatsAppBroadcastModal";
+import { formatAnnouncementMessage } from "@/lib/whatsapp-service";
 import { formatShortDate, formatDateIndo } from "@/lib/utils";
 
 export default function AnnouncementsPage() {
@@ -37,6 +40,10 @@ export default function AnnouncementsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAnn, setEditingAnn] = useState<Announcement | null>(null);
+
+  // WhatsApp Broadcast Modal State
+  const [isWaModalOpen, setIsWaModalOpen] = useState(false);
+  const [waMessage, setWaMessage] = useState("");
 
   useEffect(() => {
     setAnnouncements(getAnnouncements());
@@ -93,6 +100,13 @@ export default function AnnouncementsPage() {
   const handleAddNew = () => {
     setEditingAnn(null);
     setIsModalOpen(true);
+  };
+
+  const handleOpenWaBroadcast = (ann: Announcement) => {
+    const course = getCourse(ann.targetCourseId);
+    const formatted = formatAnnouncementMessage(activeClass, ann, course || undefined);
+    setWaMessage(formatted);
+    setIsWaModalOpen(true);
   };
 
   const getCategoryBadgeVariant = (cat: AnnouncementCategory) => {
@@ -284,24 +298,33 @@ export default function AnnouncementsPage() {
                     <User className="w-3.5 h-3.5 text-slate-400" /> Dibuat oleh: <strong className="text-slate-700 font-semibold">{ann.author}</strong>
                   </span>
 
-                  {canManage && (
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleEdit(ann)}
-                        className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-white rounded-lg transition-colors"
-                        title="Edit"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(ann.id, ann.title)}
-                        className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-white rounded-lg transition-colors"
-                        title="Hapus"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleOpenWaBroadcast(ann)}
+                      className="px-2.5 py-1 text-emerald-700 hover:bg-emerald-100 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
+                      title="Kirim Pengumuman ke WhatsApp"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" /> Broadcast WA
+                    </button>
+                    {canManage && (
+                      <>
+                        <button
+                          onClick={() => handleEdit(ann)}
+                          className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-white rounded-lg transition-colors"
+                          title="Edit"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(ann.id, ann.title)}
+                          className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-white rounded-lg transition-colors"
+                          title="Hapus"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -366,24 +389,33 @@ export default function AnnouncementsPage() {
                     <User className="w-3 h-3 text-slate-300" /> {ann.author}
                   </span>
 
-                  {canManage && (
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleEdit(ann)}
-                        className="p-1 hover:bg-slate-100 rounded text-slate-500"
-                        title="Edit"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(ann.id, ann.title)}
-                        className="p-1 hover:bg-rose-50 rounded text-rose-500"
-                        title="Hapus"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleOpenWaBroadcast(ann)}
+                      className="px-2.5 py-1 text-emerald-600 hover:bg-emerald-50 rounded-lg text-xs font-medium flex items-center gap-1 transition-colors"
+                      title="Kirim ke WhatsApp"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" /> Broadcast WA
+                    </button>
+                    {canManage && (
+                      <>
+                        <button
+                          onClick={() => handleEdit(ann)}
+                          className="p-1 hover:bg-slate-100 rounded text-slate-500"
+                          title="Edit"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(ann.id, ann.title)}
+                          className="p-1 hover:bg-rose-50 rounded text-rose-500"
+                          title="Hapus"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -399,6 +431,14 @@ export default function AnnouncementsPage() {
           setEditingAnn(null);
         }}
         initialAnnouncement={editingAnn}
+      />
+
+      {/* WhatsApp Broadcast Modal */}
+      <WhatsAppBroadcastModal
+        isOpen={isWaModalOpen}
+        onClose={() => setIsWaModalOpen(false)}
+        title="Broadcast Pengumuman ke WhatsApp"
+        defaultMessage={waMessage}
       />
     </div>
   );
