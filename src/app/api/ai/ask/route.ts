@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 
-const API_SECRET = process.env.API_SECRET_KEY || "tmj-secret-bot-2026";
+const API_SECRET = process.env.API_SECRET_KEY || "";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
 const SYSTEM_INSTRUCTION = [
@@ -11,7 +12,6 @@ const SYSTEM_INSTRUCTION = [
   "Answer in friendly Indonesian by default.",
 ].join(" ");
 
-// Exact models available in your Google AI Studio account
 const MODELS_TO_TRY = [
   { version: "v1beta", model: "gemini-3.7-flash" },
   { version: "v1beta", model: "gemini-flash-latest" },
@@ -23,14 +23,30 @@ const MODELS_TO_TRY = [
   { version: "v1beta", model: "gemini-3-flash-preview" },
 ];
 
+function timingSafeCheck(inputSecret: string, expectedSecret: string): boolean {
+  if (!inputSecret || !expectedSecret) return false;
+  if (inputSecret.length !== expectedSecret.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(inputSecret), Buffer.from(expectedSecret));
+}
+
 export async function POST(req: NextRequest) {
   try {
+    if (!API_SECRET) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Konfigurasi Keamanan: API_SECRET_KEY belum diisi di Vercel Environment Variables.",
+        },
+        { status: 500 }
+      );
+    }
+
     const authHeader = req.headers.get("authorization") || req.headers.get("x-api-secret") || "";
     const token = authHeader.replace("Bearer ", "").trim();
 
-    if (API_SECRET && token !== API_SECRET) {
+    if (!timingSafeCheck(token, API_SECRET)) {
       return NextResponse.json(
-        { success: false, error: "Akses Ditolak: Secret Key tidak valid." },
+        { success: false, error: "Akses Ditolak: Kunci Otentikasi (API Secret) tidak valid." },
         { status: 401 }
       );
     }
