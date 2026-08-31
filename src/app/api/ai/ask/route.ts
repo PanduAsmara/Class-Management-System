@@ -12,6 +12,13 @@ const SYSTEM_INSTRUCTION = [
   "Answer in friendly Indonesian by default.",
 ].join(" ");
 
+const SUPPORTED_MODELS = [
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
+  "gemini-1.5-pro",
+  "gemini-pro",
+];
+
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get("authorization") || req.headers.get("x-api-secret") || "";
@@ -45,15 +52,32 @@ export async function POST(req: NextRequest) {
     }
 
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      systemInstruction: SYSTEM_INSTRUCTION,
-    });
-
     const userQuery = `Nama penanya: ${senderName || "Mahasiswa TMJ"}.\nPertanyaan: ${prompt}`;
-    const result = await model.generateContent(userQuery);
-    const response = await result.response;
-    const answer = response.text();
+
+    let lastError: any = null;
+    let answer = "";
+
+    // Try models with automatic fallback
+    for (const modelName of SUPPORTED_MODELS) {
+      try {
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          systemInstruction: SYSTEM_INSTRUCTION,
+        });
+
+        const result = await model.generateContent(userQuery);
+        const response = await result.response;
+        answer = response.text();
+        if (answer) break;
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`Model ${modelName} failed, trying next fallback:`, err.message);
+      }
+    }
+
+    if (!answer) {
+      throw lastError || new Error("Gagal menghasilkan jawaban dari semua model Gemini.");
+    }
 
     return NextResponse.json({
       success: true,
