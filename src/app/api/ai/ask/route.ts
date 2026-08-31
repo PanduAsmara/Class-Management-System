@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const API_SECRET = process.env.API_SECRET_KEY || "tmj-secret-bot-2026";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
@@ -12,11 +11,16 @@ const SYSTEM_INSTRUCTION = [
   "Answer in friendly Indonesian by default.",
 ].join(" ");
 
-const SUPPORTED_MODELS = [
-  "gemini-2.0-flash",
-  "gemini-1.5-flash",
-  "gemini-1.5-pro",
-  "gemini-pro",
+// Exact models available in your Google AI Studio account
+const MODELS_TO_TRY = [
+  { version: "v1beta", model: "gemini-3.7-flash" },
+  { version: "v1beta", model: "gemini-flash-latest" },
+  { version: "v1beta", model: "gemini-3.5-flash" },
+  { version: "v1beta", model: "gemini-3.5-flash-lite" },
+  { version: "v1beta", model: "gemini-flash-lite-latest" },
+  { version: "v1beta", model: "gemini-3.1-pro-preview" },
+  { version: "v1beta", model: "gemini-pro-latest" },
+  { version: "v1beta", model: "gemini-3-flash-preview" },
 ];
 
 export async function POST(req: NextRequest) {
@@ -51,32 +55,52 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const userQuery = `Nama penanya: ${senderName || "Mahasiswa TMJ"}.\nPertanyaan: ${prompt}`;
+    const fullPrompt = `${SYSTEM_INSTRUCTION}\n\nPenanya: ${senderName || "Mahasiswa TMJ"}\nPertanyaan: ${prompt}\n\nJawaban:`;
 
-    let lastError: any = null;
     let answer = "";
+    let lastErrorDetails = "";
 
-    // Try models with automatic fallback
-    for (const modelName of SUPPORTED_MODELS) {
+    for (const { version, model } of MODELS_TO_TRY) {
       try {
-        const model = genAI.getGenerativeModel({
-          model: modelName,
-          systemInstruction: SYSTEM_INSTRUCTION,
+        const url = `https://generativelanguage.googleapis.com/${version}/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [{ text: fullPrompt }],
+              },
+            ],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 1500,
+            },
+          }),
         });
 
-        const result = await model.generateContent(userQuery);
-        const response = await result.response;
-        answer = response.text();
-        if (answer) break;
+        const data = await res.json();
+
+        if (res.ok && data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
+          answer = data.candidates[0].content.parts[0].text;
+          break;
+        } else if (data.error) {
+          lastErrorDetails = `[${model}] ${data.error.message || JSON.stringify(data.error)}`;
+        }
       } catch (err: any) {
-        lastError = err;
-        console.warn(`Model ${modelName} failed, trying next fallback:`, err.message);
+        lastErrorDetails = `[${model}] ${err.message}`;
       }
     }
 
     if (!answer) {
-      throw lastError || new Error("Gagal menghasilkan jawaban dari semua model Gemini.");
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Google Gemini API Error: ${lastErrorDetails || "Gagal mendapatkan respon."}`,
+        },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
